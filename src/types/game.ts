@@ -1,3 +1,15 @@
+export type StatName = 'health' | 'hunger' | 'thirst' | 'wood' | 'stone'
+
+export type ChangeDirection = 'increase' | 'decrease' | 'neutral'
+
+export type LogSource = 'player_action' | 'random_event' | 'system'
+
+export interface MetricChange {
+  metric: StatName
+  value: number
+  direction: ChangeDirection
+}
+
 export interface GameState {
   health: number
   hunger: number
@@ -14,6 +26,9 @@ export interface LogEntry {
   text: string
   type: 'action' | 'event' | 'system' | 'good' | 'bad'
   turn: number
+  source: LogSource
+  sourceName: string
+  metrics: MetricChange[]
 }
 
 export interface RandomEvent {

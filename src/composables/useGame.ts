@@ -1,5 +1,5 @@
 import { ref, computed, watch } from 'vue'
-import type { GameState, LogEntry, RandomEvent, ActionType, ActionEffect } from '@/types/game'
+import type { GameState, LogEntry, RandomEvent, ActionType, ActionEffect, MetricChange, LogSource, StatName } from '@/types/game'
 import { randomEvents } from '@/data/events'
 
 const STORAGE_KEY_HIGH_SCORE = 'survival_game_high_score'
@@ -21,6 +21,34 @@ const actionNames: Record<ActionType, string> = {
   gatherStone: '采集石头',
   hunt: '打猎',
   drink: '喝水',
+}
+
+const statDisplayNames: Record<StatName, string> = {
+  health: '生命',
+  hunger: '饥饿',
+  thirst: '口渴',
+  wood: '木材',
+  stone: '石头',
+}
+
+function effectsToMetrics(effects: ActionEffect): MetricChange[] {
+  const metrics: MetricChange[] = []
+  const statOrder: StatName[] = ['health', 'hunger', 'thirst', 'wood', 'stone']
+  for (const stat of statOrder) {
+    const value = effects[stat]
+    if (value !== undefined && value !== 0) {
+      let direction: MetricChange['direction'] = 'neutral'
+      if (stat === 'hunger' || stat === 'thirst') {
+        if (value < 0) direction = 'decrease'
+        else if (value > 0) direction = 'increase'
+      } else {
+        if (value > 0) direction = 'increase'
+        else if (value < 0) direction = 'decrease'
+      }
+      metrics.push({ metric: stat, value, direction })
+    }
+  }
+  return metrics
 }
 
 export function useGame() {
@@ -62,12 +90,21 @@ export function useGame() {
     }
   }
 
-  function addLog(text: string, type: LogEntry['type'] = 'action') {
+  function addLog(
+    text: string,
+    type: LogEntry['type'] = 'action',
+    source: LogSource = 'system',
+    sourceName: string = '系统',
+    metrics: MetricChange[] = []
+  ) {
     state.value.logs.unshift({
       id: ++logIdCounter,
       text,
       type,
       turn: state.value.turn,
+      source,
+      sourceName,
+      metrics,
     })
     if (state.value.logs.length > 50) {
       state.value.logs.pop()
@@ -105,7 +142,7 @@ export function useGame() {
     if (state.value.health <= 0 || state.value.hunger >= MAX_STAT || state.value.thirst >= MAX_STAT) {
       state.value.isGameOver = true
       saveHighScore()
-      addLog('你没能在荒野中生存下来...', 'system')
+      addLog('你没能在荒野中生存下来...', 'system', 'system', '系统')
     }
   }
 
@@ -128,13 +165,27 @@ export function useGame() {
     applyEffects(effects)
     state.value.turn++
 
-    addLog(`第 ${state.value.turn} 回合：${actionNames[action]}`, 'action')
+    const actionMetrics = effectsToMetrics(effects)
+    addLog(
+      `第 ${state.value.turn} 回合：${actionNames[action]}`,
+      'action',
+      'player_action',
+      actionNames[action],
+      actionMetrics
+    )
 
     const event = getRandomEvent()
     applyEffects(event.effects)
 
     const eventLogType = event.type === 'good' ? 'good' : event.type === 'bad' ? 'bad' : 'event'
-    addLog(event.text, eventLogType)
+    const eventMetrics = effectsToMetrics(event.effects)
+    addLog(
+      event.text,
+      eventLogType,
+      'random_event',
+      event.id,
+      eventMetrics
+    )
 
     checkGameOver()
   }
@@ -167,11 +218,11 @@ export function useGame() {
       logs: [],
     }
     logIdCounter = 0
-    addLog('你醒来发现自己身处荒野中，需要想办法生存下去...', 'system')
+    addLog('你醒来发现自己身处荒野中，需要想办法生存下去...', 'system', 'system', '系统')
   }
 
   loadHighScore()
-  addLog('你醒来发现自己身处荒野中，需要想办法生存下去...', 'system')
+  addLog('你醒来发现自己身处荒野中，需要想办法生存下去...', 'system', 'system', '系统')
 
   return {
     state,
@@ -183,5 +234,6 @@ export function useGame() {
     hunt,
     drink,
     restart,
+    statDisplayNames,
   }
 }
